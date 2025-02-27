@@ -3,6 +3,7 @@ library(MASS)
 library(patchwork)
 library(ggplot2)
 library(spNNGP)
+library(invgamma)
 
 # Creating a Spatio-temporal Markov Chain
 
@@ -187,7 +188,7 @@ vecchia_loglik <- function(par, y, x, z){
   
   p_MCMC <- MCMC_pred(MCMC_out, X, xobs, yobs, Z_cov, dist_mat) 
   
-  Y_smc <- 1*(Pcond > 0.5)
+  Y_smc <- 1*(p_MCMC > 0.5)
 
   mydf1 <- data.frame(x1 = c(X[,1], xobs[,1]), x2 = c(X[,2], xobs[,2]),
                       y = c(Y_smc, yobs), p = c(p_MCMC, yobs), 
