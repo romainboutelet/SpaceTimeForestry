@@ -3,7 +3,6 @@ library(MASS)
 library(patchwork)
 library(ggplot2)
 library(spNNGP)
-library(invgamma)
 
 # Creating a Spatio-temporal Markov Chain
 
@@ -25,122 +24,7 @@ library(invgamma)
     facet_wrap(.~type, scales = "free")
 }
 
-## Developing likelihood for Spatial Markov Chain
-
-octant_nghb <- function(x,X){
-  my_radial_fn <- function(x){
-    if (x[2]>=0) return(atan(x[1]/x[2])+pi/2)
-    else return(atan(x[1]/x[2])+3*pi/2)
-  }
-  radial <- apply(X-matrix(x, ncol = ncol(X), nrow = nrow(X), byrow = T),1,
-                  my_radial_fn)
-  mask <- !is.nan(radial)
-  nghb <- c()
-  octant_mask <- (radial >= 15*pi/8) | (radial < pi/8)
-  if (!(length(radial[octant_mask & mask]) == 0)) {
-    tmp <- X
-    tmp[!(octant_mask & mask)] <- NaN
-    new_nghb <- which.min(apply(tmp, 1, function(y)
-      return(sqrt(mean((x-y)^2)))))
-    if (sqrt(mean((x-X[new_nghb,])^2)) <= cutoff) nghb <- c(nghb,new_nghb)
-  }
-  for (i in 1:7){
-    octant_mask <- (radial >= pi/8+(i-1)*pi/4) & (radial < pi/8+i*pi/4)
-    if (length(radial[octant_mask & mask]) == 0) next
-    tmp <- X
-    tmp[!(octant_mask & mask)] <- NaN
-    new_nghb <- which.min(apply(tmp, 1, function(y)
-      return(sqrt(mean((x-y)^2)))))
-    if (sqrt(mean((x-X[new_nghb,])^2)) <= cutoff) nghb <- c(nghb,new_nghb)
-  }
-  return(nghb)
-}
-
-my_nghb <- function(x, X, D){
-  if (is.null(dim(X))) X <- matrix(X, ncol = length(x))
-  D[D == 0] <- Inf
-  nghb <- which.min(D)
-  x0 <- X[nghb,]
-  mask <- (X[,1]*(x[1]-x0[1]) > (x[1]^2+x[2]^2-x0[1]^2-x0[2]^2)/2 -
-             X[,2]*(x[2]-x0[2]))
-  mask[D == Inf] <- F
-  count <- 1
-  while (any(mask) && count < 5){
-    D[!mask] <- Inf
-    nghb <- c(nghb, which.min(D))
-    x0 <- X[tail(nghb,1),]
-    mask <- mask & (X[,1]*(x[1]-x0[1]) > (x[1]^2+x[2]^2-x0[1]^2-x0[2]^2)/2 -
-                      X[,2]*(x[2]-x0[2]))
-    count <- count + 1
-  }
-  return(nghb)
-}
-
-
-### Checking quadrant function
-{
-  self_ind <- 27
-  nb_quad <- my_nghb(xobs[self_ind,], xobs)
-  mydf_quad <- data.frame(x1 = c(xobs[c(-self_ind, -nb_quad),1], xobs[self_ind,1],
-                                 xobs[nb_quad,1]),
-                          x2 = c(xobs[c(-self_ind, -nb_quad),2], xobs[self_ind,2],
-                                 xobs[nb_quad,2]),
-                          type = c(rep("other", nrow(xobs)-1-length(nb_quad)),
-                                   rep("self", 1),
-                                   rep("neighbors", length(nb_quad))))
-  ggplot(mydf_quad, aes(x = x1, y = x2, fill = factor(type),
-                        color = factor(type))) + geom_point()
-}
-
-{
-  add_pt <- X[1410,]
-  nb_quad <- my_nghb(add_pt, xobs)
-  mydf_quad <- data.frame(x1 = c(xobs[-nb_quad,1], add_pt[1],
-                                 xobs[nb_quad,1], X[,1]),
-                          x2 = c(xobs[-nb_quad,2], add_pt[2],
-                                 xobs[nb_quad,2], X[,2]),
-                          type = c(rep("other", nrow(xobs)-length(nb_quad)),
-                                   rep("self", 1),
-                                   rep("neighbors", length(nb_quad)),
-                                   rep("others", npred)),
-                          size =  c(rep(2,nrow(xobs)+1), rep(1, npred)))
-  ggplot(mydf_quad, aes(x = x1, y = x2, fill = factor(type),
-                        color = factor(type), size = size)) + geom_point()
-}
-
-vecchia_loglik <- function(par, y, x, z){
-  A <- matrix(c(par[1],par[2],par[2],par[3]), nrow = 2, ncol = 2)
-  beta0 <- par[4]
-  beta1 <- par[5]
-  n <- length(y)
-  x <- x[order(x[,1]),]
-  y <- y[order(x[,1])]
-  z <- z[order(x[,1])]
-  dist <- unname(as.matrix(dist(x, diag = T, upper = T)))
-  p <- exp(-(beta0+beta1*z))/(1+exp(-(beta0+beta1*z)))
-  lik <-  p[1]
-  for (i in 2:n){
-    D <- dist[i,1:(i-1)]
-    nghb <- my_nghb(x[i,], x[1:(i-1),],D)
-    h <- sqrt(sum((x[i,]-x[j,])^2))
-    p0_tmp <- 1-p[i]
-    p1_tmp <- p[i]
-    for (j in nghb){
-      h <- sqrt(sum((x[i,]-x[j,])^2))
-      if (y[j] == 0){
-        p1_tmp <- p1_tmp*(1-p[j])*(1-exp(-h/A[2,1]))
-        p0_tmp <- p0_tmp*(1-p[j]*(1-exp(-h/A[1,1])))
-      }
-      if (y[j] == 1){
-        p1_tmp <- p1_tmp*(1-(1-p[j])*(1-exp(-h/A[2,2])))
-        p0_tmp <- p0_tmp*p[j]*(1-exp(-h/A[1,2]))
-      }
-    }
-    if (y[i] == 0) lik <- lik * p0_tmp / (p0_tmp + p1_tmp)
-    else if (y[i] == 1) lik <- lik * p1_tmp / (p0_tmp + p1_tmp)
-  }
-  return(-log(lik))
-}
+## Spatial Markov Chain example
 
 {
   set.seed(1)
@@ -184,9 +68,12 @@ vecchia_loglik <- function(par, y, x, z){
   
   print(cbind(Z_obs,-beta0-beta1*Z_obs,p0_obs, yobs))
   
-  MCMC_out <- MCMC_all(xobs, yobs, Z_obs)
+  nn_obs <- nn2(xobs, xobs, k = 20)
+  nn_pred <- nn2(xobs, X, k = 20)
   
-  p_MCMC <- MCMC_pred(MCMC_out, X, xobs, yobs, Z_cov, dist_mat) 
+  MCMC_out <- MCMC_all(xobs, yobs, Z_obs, nn_obs)
+  
+  p_MCMC <- MCMC_pred(MCMC_out, X, xobs, yobs, z = Z_cov, nn = nn_pred) 
   
   Y_smc <- 1*(p_MCMC > 0.5)
 
