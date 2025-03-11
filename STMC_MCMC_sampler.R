@@ -1,5 +1,6 @@
 library(Rcpp)
 library(invgamma)
+library(parallel)
 sourceCpp("my_nghb.cpp")
 
 # Developing MCMC functions for spatio-temporal markov binary process
@@ -267,7 +268,7 @@ MCMC_as_beta0 <- function(x, y, z, beta0, beta1, n_samples = 20000, n_burnin = 1
 MCMC_nocov <- function(x, y, nn, a_shape = 3, a_rate = 3, a_adjust = NULL,
                        n_samples = 200, n_burnin = 1000, thin = 25, batch = 500)
   {
-  if (is.null(a_adjust)) a_adjust <- mean(nn$nn.dists[,2])
+  if (is.null(a_adjust)) a_adjust <- 3*mean(nn$nn.dists[,2])
   a_rate <- a_rate*a_adjust
   beta0_out <- rep(NA, n_samples)
   a1_out <- rep(NA, n_samples)
@@ -371,7 +372,7 @@ MCMC_nocov <- function(x, y, nn, a_shape = 3, a_rate = 3, a_adjust = NULL,
 
 MCMC_all <- function(x, y, z, nn, a_shape = 3, a_rate = 3, a_adjust = NULL, 
                      n_samples = 200, n_burnin = 1000, thin = 25, batch = 500){
-  if (is.null(a_adjust)) a_adjust <- mean(nn$nn.dists[,2])
+  if (is.null(a_adjust)) a_adjust <- 3*mean(nn$nn.dists[,2])
   a_rate <- a_rate*a_adjust
   beta0_out <- rep(NA, n_samples)
   beta1_out <- rep(NA, n_samples)
@@ -668,9 +669,9 @@ MCMC_out_del <- MCMC_nocov(xobs_del, yobs_del, nn_obs_del)
 ggplot(MCMC_out_del, aes(x = x, y = chain)) +
   geom_line() + 
   facet_wrap(~factor(par_name), scales = "free")
-ggplot(MCMC_out_del, aes(value)) +
+ggplot(subset(MCMC_out_del, par_name != "beta0"), aes(value)) +
   geom_density() + 
-  facet_wrap(~factor(par_name), scales = "free")
+  facet_wrap(~factor(par_name), scales = "fixed")
 
 fn <- function(i){
   if (i != 8) idx_seq <- (1:(nrow(X_del) %/% 8)) + (i-1)*nrow(X_del) %/% 8
@@ -682,4 +683,3 @@ fn <- function(i){
 }
 
 p_del_MCMC <- unlist(mclapply(1:8, fn, mc.cores = 8, mc.preschedule = F))
-

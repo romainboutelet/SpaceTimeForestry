@@ -99,7 +99,7 @@ library(spNNGP)
                      priors = priors, starting = starting, tuning = tuning,
                      n.samples = 6000)
   logit_out <- predict(my_logit, matrix(c(rep(1, npred),Z_cov), ncol = 2), X,
-                       sub.sample = list(start = 1000, end = 6000, thin = 10))
+                       sub.sample = list(start = 1000, end = 6000, thin = 50))
   p_logit <- apply(1/(1+exp(-logit_out$p.y.0)), 1, mean)
   Y_logit <- 1 * (p_logit > 0.5)
   

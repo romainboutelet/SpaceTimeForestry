@@ -28,6 +28,8 @@ str_name <- "/delaware_tcc.tif"
 
 myraster <- rast(paste0(str_folder,str_name))
 
+# plot(myraster)
+
 tcc_del <- myraster[myraster$delaware_tcc_2 == 255][,1]
 mask_del <- c(as.matrix(myraster$delaware_tcc_2 == 255))
 coords_del <- crds(myraster)[mask_del,]
@@ -39,14 +41,32 @@ head(mydf_del)
 # saveRDS(mydf_del, file = paste0(str_folder, "/tcc_delaware.rds"))
 mydf_del <- readRDS(paste0(str_folder, "/tcc_delaware.rds"))
 
-mygrid <- st_make_grid(st_bbox(shp), cellsize = 5000, square = F)
+mygrid <- st_make_grid(st_bbox(shp), cellsize = 5295, square = F)
 mygrid_fia <- mygrid[shp]
-sample_fia <- st_sample(mygrid_fia, size = c(1,1))[shp]
+sample_fia_init <- st_sample(mygrid_fia, size = c(1,1))
+gap_fia <- 37
+sample_fia_up <- sample_fia_init
+for (i in 1:length(sample_fia_init)){
+  sample_fia_up[[i]] <- sample_fia_init[[i]] + c(0,gap_fia)
+}
+sample_fia_left <- sample_fia_init
+for (i in 1:length(sample_fia_init)){
+  sample_fia_left[[i]] <- sample_fia_init[[i]]+c(-gap_fia*cos(pi/6),
+                                                 -gap_fia*sin(pi/6))
+}
+sample_fia_right <- sample_fia_init
+for (i in 1:length(sample_fia_init)){
+  sample_fia_right[[i]] <- sample_fia_init[[i]]+c(gap_fia*cos(pi/6),
+                                                  -gap_fia*sin(pi/6))
+}
+sample_fia <- c(sample_fia_init, sample_fia_up, sample_fia_left,
+                sample_fia_right)[shp]
 
+par(mfrow = c(1,1))
 plot(mygrid)
 plot(st_geometry(shp), add = T)
 plot(mygrid_fia, col = "#ff000088", add = T)
-plot(sample_fia, cex = 0.3, add = T)
+plot(sample_fia, cex = 0.05, add = T)
 
 samples_coords <- st_coordinates(sample_fia)
 samples_tcc <- exact_extract(myraster, st_buffer(sample_fia, 30),
