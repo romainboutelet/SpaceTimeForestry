@@ -5,6 +5,8 @@ library(FIESTA)
 library(dplyr)
 library(ggplot2)
 library(exactextractr)
+library(spNNGP)
+library(parallel)
 
 # Create shape file
 
@@ -38,8 +40,9 @@ mydf_del <- data.frame(tcc = tcc_del, x = coords_del[,1],
                        y = coords_del[,2])
 head(mydf_del)
 
+str_folder <- '/home/romain/Documents/Research/SpaceTimeForestry/SpaceTimeForestry'
 # saveRDS(mydf_del, file = paste0(str_folder, "/tcc_delaware.rds"))
-mydf_del <- readRDS(paste0(str_folder, "/tcc_delaware.rds"))
+mydf_del <- readRDS(paste0(str_folder, "/tcc_data/tcc_delaware.rds"))
 
 mygrid <- st_make_grid(st_bbox(shp), cellsize = 5295, square = F)
 mygrid_fia <- mygrid[shp]
@@ -68,16 +71,106 @@ plot(st_geometry(shp), add = T)
 plot(mygrid_fia, col = "#ff000088", add = T)
 plot(sample_fia, cex = 0.05, add = T)
 
-samples_coords <- st_coordinates(sample_fia)
-samples_tcc <- exact_extract(myraster, st_buffer(sample_fia, 30),
+samples_coords <- unname(st_coordinates(sample_fia))
+samples_obs <- exact_extract(myraster, st_buffer(sample_fia, 30),
                              "mean")$mean.delaware_tcc_1
+samples_tcc <- as.numeric(extract(myraster, vect(samples_coords))$delaware_tcc_1)
 
-mydf_del_samples <- data.frame(tcc = samples_tcc, x = samples_coords[,1],
-                           y = samples_coords[,2])
-ggplot(mydf_del_samples, aes(x = x, y = y, color = tcc)) + geom_point()
+mydf_del_samples <- data.frame(x = samples_coords[,1], y = samples_coords[,2],
+                               obs = samples_obs, z = samples_tcc)
 
 head(mydf_del_samples)
 
 # saveRDS(mydf_del_samples, file = paste0(str_folder, "/tcc_del_samples.rds"))
-mydf_del_samples <- readRDS(paste0(str_folder, "/tcc_del_samples.rds"))
- 
+mydf_del_samples <- readRDS(paste0(str_folder, "/tcc_data/tcc_del_samples.rds"))
+
+
+### Trying MCMC on TCC data
+
+X_del <- cbind(mydf_del$x, mydf_del$y)
+Z_del <- mydf_del$tcc
+xobs_del <- cbind(mydf_del_samples$x, mydf_del_samples$y)
+p_del <- matrix((mydf_del_samples$obs/100)^(log(0.5)/log(0.1)), ncol = 1)
+yobs_del <- apply(p_del, 1, 
+                  function(x) return(sample(c(0,1), 1, prob = c(1-x, x))))
+mydf_del_samples$y <- yobs_del
+zobs_del <- mydf_del_samples$z
+nn_del <- nn2(xobs_del, X_del, k = 20)
+nn_obs_del <- nn2(xobs_del, xobs_del, k = 20)
+
+# MCMC_out_del <- MCMC_all(xobs_del, yobs_del, zobs_del, nn_obs_del,
+#                          beta0_var_prop = 0.15, beta1_var_prop = 0.005,
+#                          a_var_prop = 0.15, beta1_var_prior = 0.05)
+# saveRDS(MCMC_out_del, file = paste0(str_folder, "/spMC_MCMCsamples.rds"))
+MCMC_out_del <- readRDS(paste0(str_folder, "/spMC_MCMCsamples.rds"))
+ggplot(MCMC_out_del$diagnostics, aes(x = x, y = chain)) +
+  geom_line() + 
+  facet_wrap(~factor(par_name), scales = "free")
+ggplot(subset(MCMC_out_del$subsample, !par_name %in% c("beta0", "beta1")), aes(value)) +
+  geom_density() + 
+  facet_wrap(~factor(par_name), scales = "fixed")
+ggplot(subset(MCMC_out_del$subsample, par_name %in% c("beta0", "beta1")), aes(value)) +
+  geom_density() + 
+  facet_wrap(~factor(par_name), scales = "free")
+b0_SMC <- MCMC_out_del$subsample$beta0
+mean(a)
+
+fn <- function(i){
+  if (i != 8) idx_seq <- (1:(nrow(X_del) %/% 8)) + (i-1)*nrow(X_del) %/% 8
+  else idx_seq <- (1 + (i-1)*nrow(X_del) %/% 8):nrow(X_del)
+  return(MCMC_pred(MCMC_out_del$subsample, X_del[idx_seq,,drop = F], xobs_del,
+                   yobs_del, z = Z_del[idx_seq],
+                   nn = list(nn.idx = nn_del$nn.idx[idx_seq,,drop = F],
+                             nn.dists = nn_del$nn.dists[idx_seq,,drop = F]),
+                   ProgressFile = paste0("/mcmc_",i)))
+}
+
+# p_del_MCMC <- unlist(mclapply(1:8, fn, mc.cores = 8, mc.preschedule = F))
+# saveRDS(p_del_MCMC, file = paste0(str_folder, "/spMC_MCMCpredictions.rds"))
+
+
+
+par(mfrow = c(1,2))
+plot(1*(myraster$delaware_tcc_1>=10))
+myraster_MCMC <- myraster
+# myraster_MCMC$delaware_tcc_1[myraster_MCMC$delaware_tcc_2 == 255] <-
+#   160*p_del_MCMC^2 - 60*p_del_MCMC
+myraster_MCMC$delaware_tcc_1[myraster_MCMC$delaware_tcc_2 == 255] <- p_del_MCMC
+plot(1*(myraster_MCMC$delaware_tcc_1 >= 0.5))
+
+## Now need to run spNNGP  
+
+### Fitting NNGP
+
+sigma.sq <- 5
+tau.sq <- 1
+phi <- 3/100
+##Fit a Response and Latent NNGP model
+starting <- list("phi"=phi, "sigma.sq"=5, "tau.sq"=1)
+tuning <- list("phi"=1.5)
+priors <- list(phi.unif = c(3/5000,3/30), sigma.sq.IG = c(2,5),
+               tau.sq.IG = c(2,5))
+
+my_logit_del <- spNNGP(y ~ z, data = mydf_del_samples,
+                   coords = xobs_del, method = "latent",
+                   family = "binomial", cov.model = "exponential", 
+                   priors = priors, starting = starting, tuning = tuning,
+                   n.samples = 10000)
+
+plot(my_logit_del$p.beta.samples)
+plot((my_logit_del$p.theta.samples))
+
+fn_spNNGP <- function(i){
+  if (i != 8) idx_seq <- (1:(nrow(X_del) %/% 8)) + (i-1)*nrow(X_del) %/% 8
+  else idx_seq <- (1 + (i-1)*nrow(X_del) %/% 8):nrow(X_del)
+  myX <- X_del[idx_seq,,drop = F]
+  myZ <- Z_del[idx_seq]
+  return( predict(my_logit_del,
+                  matrix(c(rep(1, nrow(myX)),myZ), ncol = 2),
+                  myX, sub.sample = list(start = 5000, end = 10000,
+                                           thin = 50), verbose = T) )
+}
+
+logit_out_del <- unlist(mclapply(1:8, fn_spNNGP, mc.cores = 8,
+                                 mc.preschedule = F))
+
