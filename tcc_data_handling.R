@@ -4,6 +4,7 @@ library(stars)
 library(FIESTA)
 library(dplyr)
 library(ggplot2)
+library(patchwork)
 library(exactextractr)
 library(spNNGP)
 library(parallel)
@@ -40,9 +41,8 @@ mydf_del <- data.frame(tcc = tcc_del, x = coords_del[,1],
                        y = coords_del[,2])
 head(mydf_del)
 
-str_folder <- '/home/romain/Documents/Research/SpaceTimeForestry/SpaceTimeForestry'
-# saveRDS(mydf_del, file = paste0(str_folder, "/tcc_delaware.rds"))
-mydf_del <- readRDS(paste0(str_folder, "/tcc_data/tcc_delaware.rds"))
+# saveRDS(mydf_del, file = "tcc_data/tcc_delaware.rds"))
+mydf_del <- readRDS("tcc_data/tcc_delaware.rds")
 
 mygrid <- st_make_grid(st_bbox(shp), cellsize = 5295, square = F)
 mygrid_fia <- mygrid[shp]
@@ -81,8 +81,8 @@ mydf_del_samples <- data.frame(x = samples_coords[,1], y = samples_coords[,2],
 
 head(mydf_del_samples)
 
-# saveRDS(mydf_del_samples, file = paste0(str_folder, "/tcc_del_samples.rds"))
-mydf_del_samples <- readRDS(paste0(str_folder, "/tcc_data/tcc_del_samples.rds"))
+# saveRDS(mydf_del_samples, file = "tcc_data/tcc_del_samples.rds")
+mydf_del_samples <- readRDS("tcc_data/tcc_del_samples.rds")
 
 
 ### Trying MCMC on TCC data
@@ -91,6 +91,7 @@ X_del <- cbind(mydf_del$x, mydf_del$y)
 Z_del <- mydf_del$tcc
 xobs_del <- cbind(mydf_del_samples$x, mydf_del_samples$y)
 p_del <- matrix((mydf_del_samples$obs/100)^(log(0.5)/log(0.1)), ncol = 1)
+
 yobs_del <- apply(p_del, 1, 
                   function(x) return(sample(c(0,1), 1, prob = c(1-x, x))))
 mydf_del_samples$y <- yobs_del
@@ -98,22 +99,34 @@ zobs_del <- mydf_del_samples$z
 nn_del <- nn2(xobs_del, X_del, k = 20)
 nn_obs_del <- nn2(xobs_del, xobs_del, k = 20)
 
-# MCMC_out_del <- MCMC_all(xobs_del, yobs_del, zobs_del, nn_obs_del,
-#                          beta0_var_prop = 0.15, beta1_var_prop = 0.005,
-#                          a_var_prop = 0.15, beta1_var_prior = 0.05)
-# saveRDS(MCMC_out_del, file = paste0(str_folder, "/spMC_MCMCsamples.rds"))
-MCMC_out_del <- readRDS(paste0(str_folder, "/spMC_MCMCsamples.rds"))
+MCMC_out_del <- MCMC_all(xobs_del, yobs_del, zobs_del, nn_obs_del,
+                         beta0_var_prop = 0.15, beta1_var_prop = 0.005,
+                         a_var_prop = 0.15, beta1_var_prior = 0.15)
+# saveRDS(MCMC_out_del, file = "spMC_MCMCsamples.rds")
+# MCMC_out_del <- readRDS("spMC_MCMCsamples.rds")
 ggplot(MCMC_out_del$diagnostics, aes(x = x, y = chain)) +
   geom_line() + 
   facet_wrap(~factor(par_name), scales = "free")
-ggplot(subset(MCMC_out_del$subsample, !par_name %in% c("beta0", "beta1")), aes(value)) +
-  geom_density() + 
-  facet_wrap(~factor(par_name), scales = "fixed")
-ggplot(subset(MCMC_out_del$subsample, par_name %in% c("beta0", "beta1")), aes(value)) +
-  geom_density() + 
-  facet_wrap(~factor(par_name), scales = "free")
+p1 <- ggplot(MCMC_out_del$subsample, aes(beta0)) +
+  geom_density() 
+p2 <- ggplot(MCMC_out_del$subsample, aes(beta1)) +
+  geom_density() 
+p1 + p2
+p3 <- ggplot(MCMC_out_del$subsample, aes(a1)) +
+  geom_density() 
+p4 <- ggplot(MCMC_out_del$subsample, aes(a2)) +
+  geom_density() 
+p5 <- ggplot(MCMC_out_del$subsample, aes(a3)) +
+  geom_density() 
+p3 + p4 + p5
 b0_SMC <- MCMC_out_del$subsample$beta0
-mean(a)
+b1_SMC <- MCMC_out_del$subsample$beta1
+myseq <- matrix(seq(0,100,0.1), ncol = 1)
+mycurve_SMC <- apply(myseq,1,function(x) return(mean(1-1/(1+exp(-b0_SMC-b1_SMC*x)))))
+
+plot(myseq, mycurve_SMC, "l")
+lines(myseq, rep(0.5, 1001), col = "red")
+lines(rep(10, 1001), myseq/100, col = "red")
 
 fn <- function(i){
   if (i != 8) idx_seq <- (1:(nrow(X_del) %/% 8)) + (i-1)*nrow(X_del) %/% 8
@@ -125,7 +138,7 @@ fn <- function(i){
                    ProgressFile = paste0("/mcmc_",i)))
 }
 
-# p_del_MCMC <- unlist(mclapply(1:8, fn, mc.cores = 8, mc.preschedule = F))
+p_del_MCMC <- unlist(mclapply(1:8, fn, mc.cores = 8, mc.preschedule = F))
 # saveRDS(p_del_MCMC, file = paste0(str_folder, "/spMC_MCMCpredictions.rds"))
 
 
@@ -148,7 +161,7 @@ phi <- 3/100
 ##Fit a Response and Latent NNGP model
 starting <- list("phi"=phi, "sigma.sq"=5, "tau.sq"=1)
 tuning <- list("phi"=1.5)
-priors <- list(phi.unif = c(3/5000,3/30), sigma.sq.IG = c(2,5),
+priors <- list(phi.unif = c(3/5000,3/37), sigma.sq.IG = c(2,5),
                tau.sq.IG = c(2,5))
 
 my_logit_del <- spNNGP(y ~ z, data = mydf_del_samples,
@@ -159,6 +172,16 @@ my_logit_del <- spNNGP(y ~ z, data = mydf_del_samples,
 
 plot(my_logit_del$p.beta.samples)
 plot((my_logit_del$p.theta.samples))
+
+idx_NNGP <- seq(5000, 10000, 50)
+b0_NNGP <- my_logit_del$p.beta.samples[idx_NNGP,1]
+b1_NNGP <- my_logit_del$p.beta.samples[idx_NNGP,2]
+myseq <- matrix(seq(0,100,0.1), ncol = 1)
+mycurve_NNGP <- apply(myseq,1,function(x) return(mean(1-1/(1+exp(b0_NNGP+b1_NNGP*x)))))
+
+plot(myseq, mycurve_NNGP, "l")
+lines(myseq, rep(0.5, 1001), col = "red")
+lines(rep(10, 1001), myseq/100, col = "red")
 
 fn_spNNGP <- function(i){
   if (i != 8) idx_seq <- (1:(nrow(X_del) %/% 8)) + (i-1)*nrow(X_del) %/% 8

@@ -42,14 +42,22 @@ MCMC_pred <- function(MCMC_samples, X, x, y, z = NULL, nn, ProgressFile = NULL){
   if(is.null(dim(X))) X <- matrix(X, ncol = 2)
   npred <- nrow(X)
   nobs <- nrow(x)
+  n_samples <- nrow(MCMC_samples)
   if (is.null(z)){
+    if (!(is.null(MCMC_samples$beta1))){
+      return("z needs to be provided")
+    }
     z <- rep(0, npred)
     beta1.estim <- F
-    n_samples <- nrow(MCMC_samples) %/% 4
   } 
   else {
-    beta1.estim <- T
-    n_samples <- nrow(MCMC_samples) %/% 5
+    if (is.null(MCMC_samples$beta1)){
+      print("z is not necessary and will be ignored")
+      beta1.estim <- F
+      z <- rep(0, npred)
+    } else {
+      beta1.estim <- T
+    }
   }
   p_out <- z*0
   pb <- txtProgressBar(min = 0, max = n_samples, initial = 0, style = 3) 
@@ -58,9 +66,9 @@ MCMC_pred <- function(MCMC_samples, X, x, y, z = NULL, nn, ProgressFile = NULL){
     a2 <- MCMC_samples$a2[s]
     a3 <- MCMC_samples$a3[s]
     A <- matrix(c(a1, a2, a2, a3), nrow = 2, ncol = 2)
-    b0 <- subset(MCMC_samples, par_name == "beta0")$value[s]
+    b0 <- MCMC_samples$beta0[s]
     if (!(beta1.estim)) b1 <- 0
-    else b1 <- subset(MCMC_samples, par_name == "beta1")$value[s]
+    else b1 <- MCMC_samples$beta1[s]
     p <- exp(-(b0+b1*z))/(1+exp(-(b0+b1*z)))
     Pcond <- p
     for (i in 1:npred){
@@ -446,14 +454,11 @@ MCMC_all <- function(x, y, z, nn, a_shape = 3, a_rate = 3, a_adjust = NULL,
                                                    "a3"), each = n_samples)), 
                            x = rep(1:n_samples,5)),
               subsample =
-                data.frame(value = c(beta0_out[idx_subsample], 
-                                     beta1_out[idx_subsample],
-                                     a1_out[idx_subsample], 
-                                     a2_out[idx_subsample],
-                                     a3_out[idx_subsample]), 
-                           par_name = factor(rep(
-                             c("beta0", "beta1","a1", "a2", "a3"), 
-                             each = n_subsample)))))
+                data.frame(beta0 = beta0_out[idx_subsample], 
+                           beta1 = beta1_out[idx_subsample],
+                           a1 = a1_out[idx_subsample], 
+                           a2 = a2_out[idx_subsample],
+                           a3 = a3_out[idx_subsample])))
 }
 
 # {
