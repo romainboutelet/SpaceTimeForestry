@@ -123,7 +123,6 @@ b0_SMC <- MCMC_out_del$subsample$beta0
 b1_SMC <- MCMC_out_del$subsample$beta1
 myseq <- matrix(seq(0,100,0.1), ncol = 1)
 mycurve_SMC <- apply(myseq,1,function(x) return(mean(1-1/(1+exp(-b0_SMC-b1_SMC*x)))))
-
 plot(myseq, mycurve_SMC, "l")
 lines(myseq, rep(0.5, 1001), col = "red")
 lines(rep(10, 1001), myseq/100, col = "red")
@@ -139,7 +138,7 @@ fn <- function(i){
 }
 
 p_del_MCMC <- unlist(mclapply(1:8, fn, mc.cores = 8, mc.preschedule = F))
-# saveRDS(p_del_MCMC, file = paste0(str_folder, "/spMC_MCMCpredictions.rds"))
+# saveRDS(p_del_MCMC, file = "spMC_MCMCpredictions.rds")
 
 
 
@@ -188,12 +187,17 @@ fn_spNNGP <- function(i){
   else idx_seq <- (1 + (i-1)*nrow(X_del) %/% 8):nrow(X_del)
   myX <- X_del[idx_seq,,drop = F]
   myZ <- Z_del[idx_seq]
-  return( predict(my_logit_del,
+  return(predict(my_logit_del,
                   matrix(c(rep(1, nrow(myX)),myZ), ncol = 2),
                   myX, sub.sample = list(start = 5000, end = 10000,
-                                           thin = 50), verbose = T) )
+                                           thin = 50), verbose = T))
 }
 
-logit_out_del <- unlist(mclapply(1:8, fn_spNNGP, mc.cores = 8,
-                                 mc.preschedule = F))
-
+# logit_out_del <- unlist(mclapply(1:8, fn_spNNGP, mc.cores = 8,
+#                                  mc.preschedule = F))
+logit_out_del <- predict(my_logit_del,
+                         matrix(c(rep(1, nrow(X_del)),Z_del), ncol = 2),
+                         X_del, sub.sample = list(start = 5000, end = 10000,
+                                                thin = 50), verbose = T,
+                         n.omp.threads = 8)
+ 
