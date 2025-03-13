@@ -137,9 +137,10 @@ fn <- function(i){
                    ProgressFile = paste0("/mcmc_",i)))
 }
 
-p_del_MCMC <- unlist(mclapply(1:8, fn, mc.cores = 8, mc.preschedule = F))
+# p_del_MCMC <- unlist(mclapply(1:8, fn, mc.cores = 8, mc.preschedule = F))
 # saveRDS(p_del_MCMC, file = "spMC_MCMCpredictions.rds")
-
+p_del_MCMC <- readRDS("spMC_MCMCpredictions.rds")
+mean((mydf_del$tcc >= 10) != (p_del_MCMC >= 0.5))
 
 
 par(mfrow = c(1,2))
@@ -201,3 +202,15 @@ logit_out_del <- predict(my_logit_del,
                                                 thin = 50), verbose = T,
                          n.omp.threads = 8)
  
+### Now trying pure GLM
+
+model_nospat <- glm(obs~z, family = "binomial", data = mydf_del_samples)
+b0_glm <- model_nospat$coefficients[1]
+b1_glm <- model_nospat$coefficients[2]
+plot(myseq, 1-1/(1+exp(b0_glm+b1_glm*myseq)), "l")
+lines(myseq, rep(0.5, 1001), col = "red")
+lines(rep(10, 1001), myseq/100, col = "red")
+
+mydf_del$z <- mydf_del$tcc
+pred_glm <- predict(model_nospat, mydf_del)
+mean((mydf_del$tcc >= 10) != (pred_glm >= 0.5))
