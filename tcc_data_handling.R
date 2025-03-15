@@ -91,9 +91,7 @@ Z_del <- mydf_del$z
 xobs_del <- cbind(mydf_del_samples$x1, mydf_del_samples$x2)
 yobs_del <- mydf_del_samples$y
 zobs_del <- mydf_del_samples$z
-nn_del <- nn2(xobs_del, X_del, k = 50)
-nn_obs_del <- nn2(xobs_del, xobs_del, k = 50)
-dist_obs_del <- unname(as.matrix(dist(xobs_del, diag = T, upper = T)))
+nn_del <- nn2(xobs_del, X_del, k = 20)
 
 MCMC_out_del <- MCMC_all(xobs_del, yobs_del, zobs_del, n_burnin = 5000,
                          n_samples = 10000, thin = 50, batch = 500,
@@ -131,8 +129,8 @@ fn <- function(i){
                    ProgressFile = paste0("/mcmc_",i)))
 }
 
-# p_del_MC <- unlist(mclapply(1:6, fn, mc.cores = 6, mc.preschedule = F))
-# saveRDS(p_del_MC, file = "spMC_del_MCMCpredictions.rds")
+p_del_MC <- unlist(mclapply(1:6, fn, mc.cores = 6, mc.preschedule = F))
+saveRDS(p_del_MC, file = "spMC_del_MCMCpredictions.rds")
 p_del_MC <- readRDS("spMC_del_MCMCpredictions.rds")
 
 ## Now need to run spNNGP  
@@ -215,20 +213,23 @@ p_del_GLM <- as.numeric(1-1/(1+exp(predict(model_nospat, mydf_del))))
 {
   str_name <- "/delaware_tcc.tif"
   myraster <- rast(paste0(str_folder,str_name))
-  par(mfrow = c(1,3))
-  # plot(100*(myraster$delaware_tcc_1/100)^(log(0.5)/log(0.1)))
+  par(mfrow = c(2,2))
+  plot(100*(myraster$delaware_tcc_1/100)^(log(0.5)/log(0.1)))
   myraster_MC <- myraster
   myraster_MC$delaware_tcc_1[myraster_MC$delaware_tcc_2 == 255] <- p_del_MC
-  plot(100*(myraster_MC$delaware_tcc_1) + 50 - 
-         100*(myraster$delaware_tcc_1/100)^(log(0.5)/log(0.1)))
+  # plot(100*(myraster_MC$delaware_tcc_1) + 50 - 
+  #        100*(myraster$delaware_tcc_1/100)^(log(0.5)/log(0.1)))
+  plot(100*(myraster_MC$delaware_tcc_1))
   myraster_GLM <- myraster
   myraster_GLM$delaware_tcc_1[myraster_GLM$delaware_tcc_2 == 255] <- p_del_GLM
-  plot(100*(myraster_GLM$delaware_tcc_1) + 50 -
-         100*(myraster$delaware_tcc_1/100)^(log(0.5)/log(0.1)))
+  # plot(100*(myraster_GLM$delaware_tcc_1) + 50 -
+  #        100*(myraster$delaware_tcc_1/100)^(log(0.5)/log(0.1)))
+  plot(100*(myraster_GLM$delaware_tcc_1))
   myraster_NNGP <- myraster
   myraster_NNGP$delaware_tcc_1[myraster_NNGP$delaware_tcc_2 == 255] <- p_del_NNGP
-  plot(100*(myraster_NNGP$delaware_tcc_1) + 50 -
-         100*(myraster$delaware_tcc_1/100)^(log(0.5)/log(0.1)))
+  # plot(100*(myraster_NNGP$delaware_tcc_1) + 50 -
+  #        100*(myraster$delaware_tcc_1/100)^(log(0.5)/log(0.1)))
+  plot(100*(myraster_NNGP$delaware_tcc_1))
   rm(myraster,myraster_MC,myraster_GLM,myraster_NNGP)
   gc()
 }
