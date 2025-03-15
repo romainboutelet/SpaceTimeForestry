@@ -5,55 +5,60 @@ sourceCpp("my_nghb.cpp")
 
 # Developing MCMC functions for spatio-temporal markov binary process
 
-vecchia_lik <- function(y, x, z, a1, a2, a3, beta0, beta1, dist, nn){
+vecchia_loglik <- function(y, x, z, a1, a2, a3, beta0, beta1, dist, nn, log = F){
   A <- matrix(c(a1, a2, a2, a3), ncol = 2)
   n <- length(y)
   p <- exp(-(beta0+beta1*z))/(1+exp(-(beta0+beta1*z)))
-  lik <-  p[1]
+  if (y[1] == 0) loglik <- 1 - p[1]
+  if (y[1] == 1) loglik <- p[1]
   if (is.null(nn)){
     for (i in 2:n){
-      nghb <- my_nghb_cpp(x[i,], x[1:i,,drop=F], dist)
-      p0_tmp <- 1-p[i]
-      p1_tmp <- p[i]
+      nghb <- my_nghb_cpp(x[i,], x[1:i,,drop=F], dist[i,1:i])
+      lp0_tmp <- log(1-p[i])
+      lp1_tmp <- log(p[i])
       for (j in nghb){
         h <- dist[i,j]
         if (y[j] == 0){
-          p1_tmp <- p1_tmp*(1-p[j])*(1-exp(-h/A[2,1]))
-          p0_tmp <- p0_tmp*(1-p[j]*(1-exp(-h/A[1,1])))
+          lp1_tmp <- lp1_tmp+log(1-p[j])+log(1-exp(-h/A[2,1]))
+          lp0_tmp <- lp0_tmp+log(1-p[j]*(1-exp(-h/A[1,1])))
         }
         if (y[j] == 1){
-          p1_tmp <- p1_tmp*(1-(1-p[j])*(1-exp(-h/A[2,2])))
-          p0_tmp <- p0_tmp*p[j]*(1-exp(-h/A[1,2]))
+          lp1_tmp <- lp1_tmp+log(1-(1-p[j])*(1-exp(-h/A[2,2])))
+          lp0_tmp <- lp0_tmp+log(p[j])+log(1-exp(-h/A[1,2]))
         }
       }
-      if (y[i] == 0) lik <- lik * p0_tmp / (p0_tmp + p1_tmp)
-      else if (y[i] == 1) lik <- lik * p1_tmp / (p0_tmp + p1_tmp)
+      if (y[i] == 0) loglik <- loglik + lp0_tmp - log(exp(lp0_tmp) +exp(lp1_tmp))
+      if (y[i] == 1) loglik <- loglik + lp1_tmp - log(exp(lp0_tmp) +exp(lp1_tmp))
     }
   } else if (is.null(dist)){
     for (i in 2:n){
-      id_nn <- nn$nn.idx[i,nn$nn.idx[i,] <= i]
-      dist_nn <- nn$nn.dists[i,nn$nn.idx[i,] <= i]
-      x0 <- x[id_nn,,drop=F]
-      nghb <- my_nghb_cpp(x[i,], x0, dist_nn)
-      p0_tmp <- 1-p[i]
-      p1_tmp <- p[i]
+      id_nn <- nn$nn.idx[i,nn$nn.idx[i,] < i]
+      if (length(id_nn) > 0){
+        dist_nn <- nn$nn.dists[i,nn$nn.idx[i,] < i]
+        x0 <- x[id_nn,,drop=F]
+        nghb <- my_nghb_cpp(x[i,], x0, dist_nn)
+      } else {
+        nghb <- NULL
+      }
+      lp0_tmp <- log(1-p[i])
+      lp1_tmp <- log(p[i])
       for (j_ind in nghb){
         j <- id_nn[j_ind]
         h <- dist_nn[j_ind]
         if (y[j] == 0){
-          p1_tmp <- p1_tmp*(1-p[j])*(1-exp(-h/A[2,1]))
-          p0_tmp <- p0_tmp*(1-p[j]*(1-exp(-h/A[1,1])))
+          lp1_tmp <- lp1_tmp+log(1-p[j])+log(1-exp(-h/A[2,1]))
+          lp0_tmp <- lp0_tmp+log(1-p[j]*(1-exp(-h/A[1,1])))
         }
         if (y[j] == 1){
-          p1_tmp <- p1_tmp*(1-(1-p[j])*(1-exp(-h/A[2,2])))
-          p0_tmp <- p0_tmp*p[j]*(1-exp(-h/A[1,2]))
+          lp1_tmp <- lp1_tmp+log(1-(1-p[j])*(1-exp(-h/A[2,2])))
+          lp0_tmp <- lp0_tmp+log(p[j])+log(1-exp(-h/A[1,2]))
         }
       }
-      if (y[i] == 0) lik <- lik * p0_tmp / (p0_tmp + p1_tmp)
-      else if (y[i] == 1) lik <- lik * p1_tmp / (p0_tmp + p1_tmp)
+      if (y[i] == 0) loglik <- loglik + lp0_tmp - log(exp(lp0_tmp) +exp(lp1_tmp))
+      if (y[i] == 1) loglik <- loglik + lp1_tmp - log(exp(lp0_tmp) +exp(lp1_tmp))
     }
   }
-  return(lik)
+  return(loglik)
 }
 
 ## Write function that creates cross-matrix of distances 
@@ -151,14 +156,14 @@ MCMC_nocov <- function(x, y, a_min = NULL, a_max = NULL,
     a1_prop <- exp(rnorm(1,log(a1_now),a_var_prop))
     a2_prop <- exp(rnorm(1,log(a2_now),a_var_prop))
     a3_prop <- exp(rnorm(1,log(a3_now),a_var_prop))
-    r <- log(vecchia_lik(y, x, z, a1_prop, a2_prop, a3_prop,
-                         beta0_prop, 0, dist)) + 
+    r <- vecchia_loglik(y, x, z, a1_prop, a2_prop, a3_prop,
+                        beta0_prop, 0, dist) + 
       log(dnorm(beta0_prop,0,10)) +
       log(dunif(log(a1_prop),log(a_min),log(a_max))) + 
       log(dunif(log(a2_prop),log(a_min),log(a_max))) +
       log(dunif(log(a3_prop),log(a_min),log(a_max))) - (
-        log(vecchia_lik(y, x, z, a1_now, a2_now, a3_now,
-                        beta0_now, 0, dist)) + 
+        vecchia_loglik(y, x, z, a1_now, a2_now, a3_now,
+                       beta0_now, 0, dist) + 
           log(dnorm(beta0_now,0,10)) +
           log(dunif(log(a1_now),log(a_min),log(a_max))) + 
           log(dunif(log(a2_now),log(a_min),log(a_max))) +
@@ -201,25 +206,27 @@ MCMC_nocov <- function(x, y, a_min = NULL, a_max = NULL,
 
 ### Now everything
 
-MCMC_all <-  function(x, y, z, a_min = NULL, a_max = NULL, n_samples = 10000,
+MCMC_all <-  function(x0, y0, z0, a_min = NULL, a_max = NULL, n_samples = 10000,
                       n_burnin = 5000, thin = 50, batch = 500,
                       beta0_var_prop = 0.25, beta0_start = NULL,
                       beta1_var_prior = 10, beta1_var_prop = 0.25,
-                      beta1_start = NULL, a_var_prop = 1, dist.used = T){
-  order_seq <- order(x[,1])
-  x <- x[order_seq,]
-  y <- y[order_seq]
-  z <- z[order_seq]
-  if (nrow(x < 400) | dist.used){
+                      beta1_start = NULL, a_var_prop = 1, dist.used = F){
+  order_seq <- order(x0[,1])
+  x <- x0[order_seq,]
+  y <- y0[order_seq]
+  z <- z0[order_seq]
+  if ((nrow(x) < 400) || dist.used){
     dist <- unname(as.matrix(dist(x, diag = T, upper = T)))
     if (is.null(a_min)) a_min <- 3*min(dist[dist!=0])/10
     if (is.null(a_max)) a_max <- 3*max(dist[dist!=0])
     nn <- NULL
-    print(dist.used)
-  }
-  else {
+    print("dist is used")
+  } else {
+    print("nn is used")
     dist <- NULL
-    nn <- nn2(x, x, k = 100)
+    nn <- nn2(x, x, k = 50)
+    if (is.null(a_min)) a_min <- 3*mean(nn$nn.dists[,2])/10
+    if (is.null(a_max)) a_max <- 3*max(nn$nn.dists[,ncol(nn$nn.dists)])
   }
   print(c(a_min, a_max))
   beta0_out <- rep(NA, n_samples)
@@ -248,14 +255,14 @@ MCMC_all <-  function(x, y, z, a_min = NULL, a_max = NULL, n_samples = 10000,
     a1_prop <- exp(rnorm(1,log(a1_now),a_var_prop))
     a2_prop <- exp(rnorm(1,log(a2_now),a_var_prop))
     a3_prop <- exp(rnorm(1,log(a3_now),a_var_prop))
-    r <- log(vecchia_lik(y, x, z, a1_prop, a2_prop, a3_prop,
-                         beta0_prop, beta1_prop, dist, nn)) + 
+    r <- vecchia_loglik(y, x, z, a1_prop, a2_prop, a3_prop,
+                        beta0_prop, beta1_prop, dist, nn) + 
       log(dnorm(beta0_prop,0,10)) + log(dnorm(beta1_prop,0,10)) +
       log(dunif(log(a1_prop),log(a_min),log(a_max))) + 
       log(dunif(log(a2_prop),log(a_min),log(a_max))) +
       log(dunif(log(a3_prop),log(a_min),log(a_max))) - (
-        log(vecchia_lik(y, x, z, a1_now, a2_now, a3_now,
-                        beta0_now, beta1_now, dist, nn)) + 
+        vecchia_loglik(y, x, z, a1_now, a2_now, a3_now,
+                       beta0_now, beta1_now, dist, nn) + 
           log(dnorm(beta0_now,0,10)) + log(dnorm(beta1_now,0,10)) +
           log(dunif(log(a1_now),log(a_min),log(a_max))) + 
           log(dunif(log(a2_now),log(a_min),log(a_max))) +
@@ -301,8 +308,8 @@ MCMC_all <-  function(x, y, z, a_min = NULL, a_max = NULL, n_samples = 10000,
                            a2 = a2_out[idx_subsample],
                            a3 = a3_out[idx_subsample])))
 }
-  
-  
+
+
 # {
 #   Rprof()
 #   MCMC_out <- MCMC_all(xobs, yobs, Z_obs, nn_obs, n_samples = 200, thin = 10)
@@ -315,9 +322,9 @@ MCMC_all <-  function(x, y, z, a_min = NULL, a_max = NULL, n_samples = 10000,
 #     facet_wrap(~factor(par_name), scales = "free")
 # }
 # {
-   # ggplot(MCMC_out, aes(value)) +
-   #   geom_density() +
-   #   facet_wrap(~factor(par_name), scales = "free")
+# ggplot(MCMC_out, aes(value)) +
+#   geom_density() +
+#   facet_wrap(~factor(par_name), scales = "free")
 # }
 
 ### Checking the mixing of the chains
@@ -353,15 +360,15 @@ MCMC_all_mixing <- function(x, y, z, n_samples = 200, n_burnin = 10,
         a1_prop <- exp(rnorm(1,log(a1_now),0.5))
         a2_prop <- exp(rnorm(1,log(a2_now),0.5))
         a3_prop <- exp(rnorm(1,log(a3_now),0.5))
-        r <- log(vecchia_lik_betas(y, x, z, a1_prop, a2_prop, a3_prop,
-                                   beta0_prop, beta1_prop)) + 
+        r <- vecchia_loglik_betas(y, x, z, a1_prop, a2_prop, a3_prop,
+                                  beta0_prop, beta1_prop) + 
           log(dnorm(beta0_prop,0,10)) + log(dnorm(beta1_prop,0,10)) +
           log(dinvgamma(a1_prop,a_shape,a_rate)) + 
           log(dinvgamma(a2_prop,a_shape,a_rate)) +
           log(dinvgamma(a3_prop,a_shape,a_rate)) + 
           log(a1_prop) + log(a2_prop) + log(a3_prop) - (
-            log(vecchia_lik_betas(y, x, z, a1_now, a2_now, a3_now,
-                                  beta0_now, beta1_now)) + 
+            vecchia_loglik_betas(y, x, z, a1_now, a2_now, a3_now,
+                                 beta0_now, beta1_now) + 
               log(dnorm(beta0_now,0,10)) + log(dnorm(beta1_now,0,10)) +
               log(dinvgamma(a1_now,a_shape,a_rate)) + 
               log(dinvgamma(a2_now,a_shape,a_rate)) +
@@ -391,15 +398,15 @@ MCMC_all_mixing <- function(x, y, z, n_samples = 200, n_burnin = 10,
       a1_prop <- exp(rnorm(1,log(a1_now),0.25))
       a2_prop <- exp(rnorm(1,log(a2_now),0.25))
       a3_prop <- exp(rnorm(1,log(a3_now),0.25))
-      r <- log(vecchia_lik_betas(y, x, z, a1_prop, a2_prop, a3_prop,
-                                 beta0_prop, beta1_prop)) + 
+      r <- vecchia_loglik_betas(y, x, z, a1_prop, a2_prop, a3_prop,
+                                beta0_prop, beta1_prop) + 
         log(dnorm(beta0_prop,0,10)) + log(dnorm(beta1_prop,0,10)) +
         log(dinvgamma(a1_prop,a_shape,a_rate)) + 
         log(dinvgamma(a2_prop,a_shape,a_rate)) +
         log(dinvgamma(a3_prop,a_shape,a_rate)) + 
         log(a1_prop) + log(a2_prop) + log(a3_prop) - (
-          log(vecchia_lik_betas(y, x, z, a1_now, a2_now, a3_now,
-                                beta0_now, beta1_now)) + 
+          vecchia_loglik_betas(y, x, z, a1_now, a2_now, a3_now,
+                               beta0_now, beta1_now) + 
             log(dnorm(beta0_now,0,10)) + log(dnorm(beta1_now,0,10)) +
             log(dinvgamma(a1_now,a_shape,a_rate)) + 
             log(dinvgamma(a2_now,a_shape,a_rate)) +

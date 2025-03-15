@@ -138,5 +138,35 @@ library(spNNGP)
   (p1 + p2)/(p3 + p4) 
  }
 
+#### Checking neighbours
+
+{
+  dist_obs <- unname(as.matrix(dist(rbind(xobs, xobs))))
+  pt <- 38
+  nghbs_ind <- my_nghb_cpp(xobs[pt,], xobs, dist_obs[pt,])
+  type <- rep("standard", nrow(xobs))
+  type[pt] <- "target"
+  type[nghbs_ind] <- "neighbour"
+  mydf_try <- data.frame(x1 = xobs[,1], x2 = xobs[,2], type = type)
+  
+  
+  ggplot(mydf_try, aes(x = x1, y = x2, color = type)) + geom_point()
+}
+  
+{
+  dist_obs <- unname(as.matrix(dist(rbind(xobs, xobs))))
+  pt <- 380
+  nghbs_ind <- my_nghb_cpp(X[pt,], xobs, dist_mat[pt,])
+  type <- rep("standard", nrow(xobs)+1)
+  type[length(type)] <- "target"
+  type[nghbs_ind] <- "neighbour"
+  mydf_try <- data.frame(x1 = c(xobs[,1],X[pt,1]),
+                         x2 = c(xobs[,2], X[pt,2]),
+                         type = type)
+  
+  
+  ggplot(mydf_try, aes(x = x1, y = x2, color = type)) + geom_point()
+}
+
 ## Make it Spatio-TEMPORAL
 
