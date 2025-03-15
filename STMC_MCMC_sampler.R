@@ -12,7 +12,7 @@ vecchia_lik <- function(y, x, z, a1, a2, a3, beta0, beta1, dist, nn){
   lik <-  p[1]
   if (is.null(nn)){
     for (i in 2:n){
-      nghb <- my_nghb_cpp(x[i,], x[1:(i-1),,drop=F], dist)
+      nghb <- my_nghb_cpp(x[i,], x[1:i,,drop=F], dist)
       p0_tmp <- 1-p[i]
       p1_tmp <- p[i]
       for (j in nghb){
@@ -31,8 +31,8 @@ vecchia_lik <- function(y, x, z, a1, a2, a3, beta0, beta1, dist, nn){
     }
   } else if (is.null(dist)){
     for (i in 2:n){
-      id_nn <- nn$nn.idx[i,nn$nn.idx[i,] < i]
-      dist_nn <- nn$nn.dists[i,nn$nn.idx[i,] < i]
+      id_nn <- nn$nn.idx[i,nn$nn.idx[i,] <= i]
+      dist_nn <- nn$nn.dists[i,nn$nn.idx[i,] <= i]
       x0 <- x[id_nn,,drop=F]
       nghb <- my_nghb_cpp(x[i,], x0, dist_nn)
       p0_tmp <- 1-p[i]

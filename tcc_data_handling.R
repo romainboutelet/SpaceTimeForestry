@@ -93,13 +93,14 @@ yobs_del <- mydf_del_samples$y
 zobs_del <- mydf_del_samples$z
 nn_del <- nn2(xobs_del, X_del, k = 50)
 nn_obs_del <- nn2(xobs_del, xobs_del, k = 50)
+dist_obs_del <- unname(as.matrix(dist(xobs_del, diag = T, upper = T)))
 
-MCMC_out_del <- MCMC_all(xobs_del, yobs_del, zobs_del, n_burnin = 5000,
-                         n_samples = 10000, thin = 50, batch = 100,
-                         beta0_var_prop = .25, beta0_start = 0,
-                         a_var_prop = 0.5, a_max = 10000,
+MCMC_out_del <- MCMC_all(xobs_del, yobs_del, zobs_del, n_burnin = 500,
+                         n_samples = 1000, thin = 50, batch = 100,
+                         beta0_var_prop = 0.25, beta0_start = 0,
+                         a_var_prop = 0.2, a_max = 10000,
                          beta1_var_prop = 0.005, 
-                         beta1_var_prior = 0.15, beta1_start = 0)
+                         beta1_var_prior = 0.15, beta1_start = 0, dist.used = F)
 # saveRDS(MCMC_out_del, file = "spMC_MCMCsamples.rds")
 MCMC_out_del <- readRDS("spMC_MCMCsamples.rds")
 ggplot(MCMC_out_del$diagnostics, aes(x = x, y = chain)) +
