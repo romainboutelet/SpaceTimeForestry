@@ -6,22 +6,21 @@
 Rcpp::IntegerVector my_nghb_cpp(Rcpp::NumericVector x, Rcpp::NumericMatrix X, Rcpp::NumericVector D) {
   int num_points = X.nrow();
   int dim_x = X.ncol();
-  Rcpp::NumericVector D_tmp(Rcpp::clone(D));
   
   // Replace D == 0 with Inf
   for (int i = 0; i < num_points; ++i) {
-    if (D_tmp(i) == 0) {
-      D_tmp(i) = std::numeric_limits<double>::infinity();
+    if (D(i) == 0) {
+      D(i) = std::numeric_limits<double>::infinity();
     }
   }
 
   
   // Find the index of the minimum distance
   int nghb = 0;
-  double min_dist = D_tmp(0);
+  double min_dist = D(0);
   for (int i = 1; i < num_points; ++i) {
-    if (D_tmp(i) < min_dist) {
-      min_dist = D_tmp(i);
+    if (D(i) < min_dist) {
+      min_dist = D(i);
       nghb = i;
     }
   }
@@ -35,7 +34,7 @@ Rcpp::IntegerVector my_nghb_cpp(Rcpp::NumericVector x, Rcpp::NumericMatrix X, Rc
   for (int i = 0; i < num_points; ++i) {
     mask[i] = (X(i, 0) * (x[0] - x0[0]) > (x[0] * x[0] + x[1] * x[1] - x0[0] * x0[0] - x0[1] * x0[1]) / 2 - X(i, 1) * (x[1] - x0[1]));
   }
-  D_tmp(nghb) = std::numeric_limits<double>::infinity();  // set the distance of the chosen nghb to Inf
+  D(nghb) = std::numeric_limits<double>::infinity();  // set the distance of the chosen nghb to Inf
   
   int count = 1;
   
@@ -44,16 +43,16 @@ Rcpp::IntegerVector my_nghb_cpp(Rcpp::NumericVector x, Rcpp::NumericMatrix X, Rc
     // Update D based on mask
     for (int i = 0; i < num_points; ++i) {
       if (!mask[i]) {
-        D_tmp(i) = std::numeric_limits<double>::infinity();
+        D(i) = std::numeric_limits<double>::infinity();
       }
     }
     
     // Find the next minimum distance
     nghb = 0;
-    min_dist = D_tmp(0);
+    min_dist = D(0);
     for (int i = 1; i < num_points; ++i) {
-      if (D_tmp(i) < min_dist) {
-        min_dist = D_tmp(i);
+      if (D(i) < min_dist) {
+        min_dist = D(i);
         nghb = i;
       }
     }
