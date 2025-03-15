@@ -226,7 +226,7 @@ MCMC_all <-  function(x0, y0, z0, a_min = NULL, a_max = NULL, n_samples = 10000,
     dist <- NULL
     nn <- nn2(x, x, k = 50)
     if (is.null(a_min)) a_min <- 3*mean(nn$nn.dists[,2])/10
-    if (is.null(a_max)) a_max <- 3*max(nn$nn.dists[,ncol(nn$nn.dists)])
+    if (is.null(a_max)) a_max <- 3*mean(nn$nn.dists[,ncol(nn$nn.dists)])
   }
   print(c(a_min, a_max))
   beta0_out <- rep(NA, n_samples)

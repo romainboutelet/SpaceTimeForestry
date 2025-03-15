@@ -144,8 +144,8 @@ tau.sq <- 1
 phi <- 1/100
 ##Fit a Response and Latent NNGP model
 starting <- list("phi"=phi, "sigma.sq"=5, "tau.sq"=1)
-tuning <- list("phi"=1.5)
-priors <- list(phi.unif = c(1/1000,1/11), sigma.sq.IG = c(2,5),
+tuning <- list("phi"=.5)
+priors <- list(phi.unif = c(1/10000,1/11.1), sigma.sq.IG = c(2,5),
                tau.sq.IG = c(2,5))
 
 spNNGP_del <- spNNGP(y ~ z, data = mydf_del_samples,
@@ -153,7 +153,7 @@ spNNGP_del <- spNNGP(y ~ z, data = mydf_del_samples,
                    family = "binomial", cov.model = "exponential",
                    priors = priors, starting = starting, tuning = tuning,
                    n.samples = 10000)
-# saveRDS(spNNGP_del, file = "spNNGP_del_MCMCsamples.rds")
+ # saveRDS(spNNGP_del, file = "spNNGP_del_MCMCsamples.rds")
 spNNGP_del <- readRDS("spNNGP_del_MCMCsamples.rds")
 
 plot(spNNGP_del$p.beta.samples)
