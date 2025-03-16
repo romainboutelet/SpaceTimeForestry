@@ -129,8 +129,8 @@ fn <- function(i){
                    ProgressFile = paste0("/mcmc_",i)))
 }
 
-p_del_MC <- unlist(mclapply(1:6, fn, mc.cores = 6, mc.preschedule = F))
-saveRDS(p_del_MC, file = "spMC_del_MCMCpredictions.rds")
+# p_del_MC <- unlist(mclapply(1:6, fn, mc.cores = 6, mc.preschedule = F))
+# saveRDS(p_del_MC, file = "spMC_del_MCMCpredictions.rds")
 p_del_MC <- readRDS("spMC_del_MCMCpredictions.rds")
 
 ## Now need to run spNNGP  
@@ -174,7 +174,7 @@ plot(spNNGP_del$p.theta.samples)
 #     pred_del_NNGP <- logit_out_del$p.y.0
 #     w_p <- 10
 #     if (i == n) w_p <- 11
-#     p_del_NNGP <- p_del_NNGP + 
+#     p_del_NNGP <- p_del_NNGP +
 #       apply(1-1/(1+exp(pred_del_NNGP)), 1, mean)/w_p
 #     rm(logit_out_del)
 #     rm(pred_del_NNGP)
@@ -213,7 +213,7 @@ p_del_GLM <- as.numeric(1-1/(1+exp(predict(model_nospat, mydf_del))))
 {
   str_name <- "/delaware_tcc.tif"
   myraster <- rast(paste0(str_folder,str_name))
-  par(mfrow = c(2,2))
+  par(mfrow = c(1,4))
   plot(100*(myraster$delaware_tcc_1/100)^(log(0.5)/log(0.1)))
   myraster_MC <- myraster
   myraster_MC$delaware_tcc_1[myraster_MC$delaware_tcc_2 == 255] <- p_del_MC
